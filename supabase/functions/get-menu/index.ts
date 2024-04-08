@@ -1,35 +1,75 @@
 // Follow this setup guide to integrate the Deno language server with your editor:
 // https://deno.land/manual/getting_started/setup_your_environment
 // This enables autocomplete, go to definition, etc.
-
+import { WebClient } from "npm:@slack/web-api@7.0.2";
 import { createClient } from "npm:@supabase/supabase-js";
+// import { Database } from "../../types/database.types.ts";
 
+const slackBotToken = Deno.env.get("SLACK_TOKEN") ?? "";
+const botClient = new WebClient(slackBotToken);
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_ANON_KEY")!,
 );
 
-Deno.serve(async () => {
-  const { data, error } = await supabase.from("pizzas").select("*");
+Deno.serve(async (req) => {
+  const { data: pizzas, error } = await supabase.from("pizzas").select("*");
 
   if (error) {
     console.log(error);
   }
 
-  return new Response(
-    JSON.stringify(data),
-    { headers: { "Content-Type": "application/json" } },
-  );
+  if (!pizzas) {
+    return new Response(JSON.stringify("No Menu Available"), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const blockKitMessage = {
+    blocks: pizzas.map((pizza) => ({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          `*${pizza.name}*\n*Ingredients:* ${pizza.ingredients}\n*Price:* ${pizza.price}`, // Formatted pizza details
+      },
+      accessory: {
+        type: "image",
+        image_url: pizza.image,
+        alt_text: `${pizza.name} Image`, // Alt text for each pizza image
+      },
+    })),
+  };
+
+  return new Response(JSON.stringify(blockKitMessage), {
+    headers: { "Content-Type": "application/json" },
+  });
 });
 
-/* To invoke locally:
-
-  1. Run `supabase start` (see: https://supabase.com/docs/reference/cli/supabase-start)
-  2. Make an HTTP request:
-
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/get-menu' \
-    --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' \
-    --header 'Content-Type: application/json' \
-    --data '{"name":"Functions"}'
-
-*/
+// const blockKitMessage = {
+//   blocks: [
+//     {
+//       type: "section",
+//       text: {
+//         type: "mrkdwn", // Use markdown for better formatting
+//         text: `*Pizza Name:* ${pizzas[0].name}`, // Include pizza name
+//       },
+//     },
+//     {
+//       type: "image",
+//       title: {
+//         type: "plain_text",
+//         text: pizzas[0].name, // Image title
+//       },
+//       image_url: pizzas[0].image, // Image URL from pizza data
+//       alt_text: "Pizza Image", // Alternative text for accessibility
+//     },
+//     {
+//       type: "section",
+//       text: {
+//         type: "mrkdwn",
+//         text: `*Ingredients:*\n${pizzas[0].ingredients}`, // Join ingredients
+//       },
+//     },
+//   ],
+// };
